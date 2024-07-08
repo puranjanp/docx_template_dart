@@ -20,14 +20,13 @@ abstract class DocxEntry {
     return arch.files.indexWhere((element) => element.name == entryName);
   }
 
-  void _updateArchive(Archive arch);
+  Future<ArchiveFile?> _updateArchive();
 
-  void _updateData(Archive arch, List<int> data) {
-    if (_index < 0) {
-      arch.addFile(ArchiveFile(_name, data.length, data));
-    } else {
-      arch.files[_index] = ArchiveFile(_name, data.length, data);
+  Future<ArchiveFile?> _createUpdatedFile(List<int> data) async {
+    if (_name.isNotEmpty) {
+      return ArchiveFile(_name, data.length, data);
     }
+    return null;
   }
 }
 
@@ -41,7 +40,7 @@ class DocxXmlEntry extends DocxEntry {
   @override
   void _load(Archive arch, String entryName) {
     _index = _getIndex(arch, entryName);
-    if (_index > 0) {
+    if (_index >= 0) {
       final f = arch.files[_index];
       final bytes = f.content as List<int>;
       final data = utf8.decode(bytes);
@@ -51,12 +50,13 @@ class DocxXmlEntry extends DocxEntry {
   }
 
   @override
-  void _updateArchive(Archive arch) {
-    if (doc != null) {
-      final data = doc!.toXmlString(pretty: false);
+  Future<ArchiveFile?> _updateArchive() async {
+    if (_doc != null) {
+      final data = _doc!.toXmlString(pretty: false);
       List<int> out = utf8.encode(data);
-      _updateData(arch, out);
+      return _createUpdatedFile(out);
     }
+    return null;
   }
 }
 
@@ -122,6 +122,15 @@ class DocxRelsEntry extends DocxXmlEntry {
     return r;
   }
 
+  @override
+  Future<ArchiveFile?> _updateArchive() async {
+    if (doc != null) {
+      final data = doc!.toXmlString(pretty: false);
+      List<int> out = utf8.encode(data);
+      return _createUpdatedFile(out);
+    }
+    return null;
+  }
   /* <Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.jpeg"/> */
 
   @override
@@ -139,20 +148,24 @@ class DocxBinEntry extends DocxEntry {
   @override
   void _load(Archive arch, String entryName) {
     _index = _getIndex(arch, entryName);
-    if (_index > 0) {
+    if (_index >= 0) {
       final f = arch.files[_index];
       _data = f.content as List<int>?;
+      _name = f.name;
     }
   }
 
   @override
-  void _updateArchive(Archive arch) {
-    _updateData(arch, _data!);
+  Future<ArchiveFile?> _updateArchive() async {
+    if (_data != null) {
+      return _createUpdatedFile(_data!);
+    }
+    return null;
   }
 }
 
 class DocxManager {
-  final Archive arch;
+  Archive arch;
   final _map = <String, DocxEntry>{};
 
   DocxManager(this.arch);
@@ -198,9 +211,24 @@ class DocxManager {
     _map[name] = e;
   }
 
-  void updateArch() {
-    _map.forEach((key, value) {
-      value._updateArchive(arch);
-    });
+  Future<Archive> updateArch() async {
+    final newArch = Archive();
+
+    // Add updated files
+    for (var entry in _map.values) {
+      final updatedFile = await entry._updateArchive();
+      if (updatedFile != null) {
+        newArch.addFile(updatedFile);
+      }
+    }
+
+    // Add remaining unchanged files
+    for (var file in arch.files) {
+      if (!_map.containsKey(file.name)) {
+        newArch.addFile(file);
+      }
+    }
+
+    return newArch;
   }
 }

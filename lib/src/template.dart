@@ -87,15 +87,30 @@ class DocxTemplate {
   ///
   /// Generates byte buffer with docx file content by given [c]
   ///
+  // Future<List<int>?> generate(Content c,
+  //     {TagPolicy tagPolicy = TagPolicy.saveText,
+  //     ImagePolicy imagePolicy = ImagePolicy.save}) async {
+  //   final vm = ViewManager.attach(_manager,
+  //       tagPolicy: tagPolicy, imgPolicy: imagePolicy);
+  //   vm.produce(c);
+  //   _manager.updateArch();
+  //   final enc = ZipEncoder();
+
+  //   return enc.encode(_manager.arch, level: Deflate.DEFAULT_COMPRESSION);
+  // }
+
   Future<List<int>?> generate(Content c,
       {TagPolicy tagPolicy = TagPolicy.saveText,
       ImagePolicy imagePolicy = ImagePolicy.save}) async {
     final vm = ViewManager.attach(_manager,
         tagPolicy: tagPolicy, imgPolicy: imagePolicy);
     vm.produce(c);
-    _manager.updateArch();
+
+    // Create a new Archive with the updated content
+    final newArch = await _manager.updateArch();
+
     final enc = ZipEncoder();
 
-    return enc.encode(_manager.arch, level: Deflate.DEFAULT_COMPRESSION);
+    return enc.encode(newArch, level: Deflate.DEFAULT_COMPRESSION);
   }
 }
